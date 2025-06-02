@@ -24,8 +24,9 @@ export class WhatsappService implements OnModuleInit {
     await this.reconnect(); // inicia ao carregar o módulo
   }
 
-  async reconnect() {
-    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
+  async reconnect(sessionId: string = 'cliente_abc') {
+    const authFolder = `baileys_auth/${sessionId}`;
+    const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
     this.sock = makeWASocket({
@@ -59,5 +60,14 @@ export class WhatsappService implements OnModuleInit {
       : `${number}@s.whatsapp.net`;
     await this.sock.sendMessage(jid, { text: message });
     console.log(`[WA] Mensagem enviada para ${number}: ${message}`);
+  }
+
+  async logoutAndResetSession(sessionId: string) {
+    const folder = `baileys_auth_info/${sessionId}`;
+    const fs = await import('fs/promises');
+    await fs.rm(folder, { recursive: true, force: true });
+    console.log(`🧹 Sessão ${sessionId} removida`);
+
+    await this.reconnect(sessionId); // reconecta com QR para esse usuário
   }
 }

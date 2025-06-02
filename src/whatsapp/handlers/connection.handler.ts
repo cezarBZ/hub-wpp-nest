@@ -39,6 +39,7 @@ export class ConnectionHandlerService {
         console.log(
           '🚪 Desconectado permanentemente. Reautenticação necessária.',
         );
+        await this.whatsappService.logoutAndResetSession('cliente_abc');
       }
     }
 
