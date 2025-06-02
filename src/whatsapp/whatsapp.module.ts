@@ -5,9 +5,10 @@ import { ConnectionHandlerService } from './handlers/connection.handler';
 import { MessageHandlerService } from './handlers/message.handler';
 import { SessionHandlerService } from './handlers/session.handler';
 import { WebsocketModule } from 'src/websocket/websocket.module';
+import { MessagesModule } from 'src/messages/message.module';
 
 @Module({
-  imports: [WebsocketModule],
+  imports: [WebsocketModule, MessagesModule],
   providers: [
     WhatsappService,
     ConnectionHandlerService,

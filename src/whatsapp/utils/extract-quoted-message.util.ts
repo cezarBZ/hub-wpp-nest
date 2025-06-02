@@ -15,7 +15,7 @@ export function extractQuotedMessage(msg: WAMessage) {
   return {
     type,
     text,
-    from: ctx.participant,
+    from: ctx.participant ?? undefined,
     fromMe: sentByMe,
   };
 }

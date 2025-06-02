@@ -7,12 +7,16 @@ import { detectMessageType } from '../utils/detect-message-type.util';
 import { extractMediaMeta } from '../utils/extract-media-meta.util';
 import { WhatsappMedias } from '../interfaces/medias.type';
 import { WebsocketService } from '../../websocket/websocket.service';
+import { MessageService } from 'src/messages/message.service';
 
 @Injectable()
 export class MessageHandlerService {
-  constructor(private readonly ws: WebsocketService) {}
+  constructor(
+    private readonly ws: WebsocketService,
+    private readonly messageService: MessageService,
+  ) {}
 
-  handleMessagesUpsert(messages: WAMessage[]) {
+  async handleMessagesUpsert(messages: WAMessage[]) {
     for (const msg of messages) {
       const jid = msg.key.remoteJid ?? '';
       if (isJidGroup(jid)) continue;
@@ -22,25 +26,32 @@ export class MessageHandlerService {
         msg,
         messageType as WhatsappMedias,
       );
+      const text = extractTextFromMessage(msg) ?? undefined;
+      const shouldSkip = !text && !mediaMetadata?.mediaUrl;
+
+      if (shouldSkip) {
+        continue;
+      }
+
+      if (!msg.message) {
+        console.log('🔍 Mensagem ignorada (sem conteúdo):', msg);
+        continue;
+      }
 
       const msgToSave: Message = {
-        text: extractTextFromMessage(msg),
+        text: text,
         type: messageType,
         chatId: msg.key.remoteJid ?? '',
         fromMe: msg.key.fromMe ?? false,
-        from: msg.pushName ?? '',
+        from: msg.pushName ?? 'Desconhecido',
         timestamp: msg.messageTimestamp as number,
         repliedByLLM: false,
         quotedMessage: extractQuotedMessage(msg),
         ...mediaMetadata,
       };
 
-      if (!msgToSave) {
-        return;
-      }
-      // console.log(msgToSave);
-
       this.ws.broadcast({ type: 'new_message', data: msg.message });
+      await this.messageService.save(msgToSave);
     }
   }
 
