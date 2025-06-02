@@ -6,9 +6,12 @@ import { isJidGroup, WAMessage } from 'baileys';
 import { detectMessageType } from '../utils/detect-message-type.util';
 import { extractMediaMeta } from '../utils/extract-media-meta.util';
 import { WhatsappMedias } from '../interfaces/medias.type';
+import { WebsocketService } from '../../websocket/websocket.service';
 
 @Injectable()
 export class MessageHandlerService {
+  constructor(private readonly ws: WebsocketService) {}
+
   handleMessagesUpsert(messages: WAMessage[]) {
     for (const msg of messages) {
       const jid = msg.key.remoteJid ?? '';
@@ -31,7 +34,13 @@ export class MessageHandlerService {
         quotedMessage: extractQuotedMessage(msg),
         ...mediaMetadata,
       };
-      console.log(msgToSave);
+
+      if (!msgToSave) {
+        return;
+      }
+      // console.log(msgToSave);
+
+      this.ws.broadcast({ type: 'new_message', data: msg.message });
     }
   }
 

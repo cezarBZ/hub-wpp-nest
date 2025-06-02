@@ -3,6 +3,7 @@ import { Injectable, OnModuleInit } from '@nestjs/common';
 import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  WASocket,
 } from 'baileys';
 import P from 'pino';
 import { MessageHandlerService } from './handlers/message.handler';
@@ -20,7 +21,11 @@ export class WhatsappService implements OnModuleInit {
   private sock: ReturnType<typeof makeWASocket>;
 
   async onModuleInit() {
-    const { state, saveCreds } = await useMultiFileAuthState('auth');
+    await this.reconnect(); // inicia ao carregar o módulo
+  }
+
+  async reconnect() {
+    const { state, saveCreds } = await useMultiFileAuthState('baileys_auth');
     const { version } = await fetchLatestBaileysVersion();
 
     this.sock = makeWASocket({
@@ -35,13 +40,17 @@ export class WhatsappService implements OnModuleInit {
     this.sock.ev.on('connection.update', (update) =>
       this.connectionHandler.handleConnectionUpdate(update),
     );
-    this.sock.ev.on(
-      'messaging-history.set',
-      this.messageHandler.handleMessagingHistorySet,
-    );
+    // this.sock.ev.on(
+    //   'messaging-history.set',
+    //   this.messageHandler.handleMessagingHistorySet,
+    // );
     this.sock.ev.on('messages.upsert', (event) =>
       this.messageHandler.handleMessagesUpsert(event.messages),
     );
+  }
+
+  getSocket(): WASocket {
+    return this.sock;
   }
 
   async sendMessage(number: string, message: string) {
