@@ -48,6 +48,13 @@ export class WhatsappService implements OnModuleInit {
     this.sock.ev.on('messages.upsert', (event) =>
       this.messageHandler.handleMessagesUpsert(event.messages),
     );
+    this.sock.ev.on('messages.upsert', (event) =>
+      this.messageHandler.gptResponder({
+        messages: event.messages,
+        sock: this.sock,
+        type: event.type,
+      }),
+    );
   }
 
   getSocket(): WASocket {
