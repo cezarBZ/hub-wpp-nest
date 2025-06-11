@@ -71,7 +71,7 @@ export class MessageHandlerService {
         const jid = msg.key.remoteJid ?? '';
         const isJidGroups = isJidGroup(jid);
 
-        if (!isJidGroups && !msg.key.fromMe) {
+        if (!isJidGroups) {
           const userMessage = msg.message?.conversation;
           const gptReply = await this.llmService.generateReply(
             systemPrompt,
