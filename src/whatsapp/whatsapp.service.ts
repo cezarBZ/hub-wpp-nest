@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import makeWASocket, {
   WASocket,
   useMultiFileAuthState,
@@ -8,6 +8,7 @@ import P from 'pino';
 import { ConnectionHandlerService } from './handlers/connection.handler';
 import { MessageHandlerService } from './handlers/message.handler';
 import { SessionHandlerService } from './handlers/session.handler';
+import { SendOrderMessageDto } from './dto/send-order-message.dto';
 import * as Path from 'path';
 
 @Injectable()
@@ -122,6 +123,23 @@ export class WhatsappService {
       console.log(`[WA] Dados da sessão ${clientId} removidos.`);
     } catch (error) {
       console.error(`[WA] Erro ao deletar pasta ${authFolder}:`, error);
+    }
+  }
+
+  async sendOrderConfirmation(data: SendOrderMessageDto, clientId: string) {
+    const jid = `${data.phone}@s.whatsapp.net`;
+    const message = `Olá ${data.customerName}, seu pedido ${data.orderId} foi confirmado! Total: R$ ${data.total.toFixed(2)}.`;
+    const session = this.sessions.get(clientId);
+    if (!session) return false;
+
+    try {
+      await session.sendMessage(jid, { text: message });
+      return { success: true };
+    } catch (error) {
+      console.error('Erro ao enviar mensagem:', error);
+      throw new InternalServerErrorException(
+        'Falha ao enviar mensagem no WhatsApp',
+      );
     }
   }
 }
