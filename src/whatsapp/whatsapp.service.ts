@@ -9,6 +9,7 @@ import { ConnectionHandlerService } from './handlers/connection.handler';
 import { MessageHandlerService } from './handlers/message.handler';
 import { SessionHandlerService } from './handlers/session.handler';
 import { SendOrderMessageDto } from './dto/send-order-message.dto';
+import { SendStoreCreatedMessageDto } from './dto/send-store-created-message.dto';
 import * as Path from 'path';
 
 @Injectable()
@@ -141,5 +142,19 @@ export class WhatsappService {
         'Falha ao enviar mensagem no WhatsApp',
       );
     }
+  }
+
+  async sendStoreWelcomeMessage(
+    data: SendStoreCreatedMessageDto,
+    clientId: string,
+  ) {
+    const message = `Parabéns ${data.ownerName}! Sua loja "${data.storeName}" foi criada com sucesso. Seja bem-vindo ao nosso catálogo!`;
+    const session = this.sessions.get(clientId);
+    if (!session) return false;
+
+    await session.sendMessage(`${data.phone}@s.whatsapp.net`, {
+      text: message,
+    });
+    return { success: true };
   }
 }

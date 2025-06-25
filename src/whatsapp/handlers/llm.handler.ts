@@ -33,16 +33,12 @@ export class LLMHandlerService {
   ): Promise<string | null> {
     const normalizedMessage = normalizePrompt(userMessage);
     const cacheKey = `llm-response:${normalizedMessage}`;
-    console.log(cacheKey);
     const cached = await this.cacheManager.get<string>(cacheKey);
-    console.log('[CACHE] Value from Redis:', cached);
 
     if (cached) {
-      console.log('[CACHE] Hit');
       return cached;
     }
 
-    console.log('[CACHE] Miss - Chamando LLM');
     const res = await this.openai.chat.completions.create({
       model: 'gpt-4', // ou gpt-3.5-turbo
       messages: [
@@ -54,10 +50,7 @@ export class LLMHandlerService {
 
     const reply = res.choices?.[0]?.message?.content;
     if (reply) {
-      console.log('[CACHE] Salvando no Redis');
       await this.cacheManager.set(cacheKey, reply, 60 * 60); // 1h
-    } else {
-      console.log('[CACHE] Resposta LLM vazia');
     }
 
     return reply;

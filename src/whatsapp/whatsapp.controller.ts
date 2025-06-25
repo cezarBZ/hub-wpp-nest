@@ -1,6 +1,7 @@
 import { Controller, Post, Body, Get, Param } from '@nestjs/common';
 import { WhatsappService } from './whatsapp.service';
 import { SendOrderMessageDto } from './dto/send-order-message.dto';
+import { SendStoreCreatedMessageDto } from './dto/send-store-created-message.dto';
 import { QRStorageService } from './qr-storage.service';
 import * as QRCode from 'qrcode';
 
@@ -17,6 +18,14 @@ export class WhatsappController {
     @Param('clientId') clientId: string,
   ) {
     return this.whatsappService.sendOrderConfirmation(body, clientId);
+  }
+
+  @Post('send-store-created-message/:clientId')
+  sendStoreCreatedMessage(
+    @Body() body: SendStoreCreatedMessageDto,
+    @Param('clientId') clientId: string,
+  ) {
+    return this.whatsappService.sendStoreWelcomeMessage(body, clientId);
   }
 
   @Get('qr/:clientId')
