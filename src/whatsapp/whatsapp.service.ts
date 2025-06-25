@@ -1,80 +1,127 @@
-// src/whatsapp/whatsapp.service.ts
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import makeWASocket, {
+  WASocket,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  WASocket,
 } from 'baileys';
 import P from 'pino';
-import { MessageHandlerService } from './handlers/message.handler';
 import { ConnectionHandlerService } from './handlers/connection.handler';
+import { MessageHandlerService } from './handlers/message.handler';
 import { SessionHandlerService } from './handlers/session.handler';
-// import { MessageRepository } from '../../modules/messages/message.repository';
+import * as Path from 'path';
 
 @Injectable()
-export class WhatsappService implements OnModuleInit {
+export class WhatsappService {
+  private sessions = new Map<string, WASocket>();
+
   constructor(
     private readonly messageHandler: MessageHandlerService,
     private readonly connectionHandler: ConnectionHandlerService,
     private readonly sessionHandler: SessionHandlerService,
   ) {}
-  private sock: ReturnType<typeof makeWASocket>;
 
-  async onModuleInit() {
-    await this.reconnect(); // inicia ao carregar o módulo
-  }
+  async startSession(clientId: string): Promise<WASocket | undefined> {
+    if (this.sessions.has(clientId)) {
+      console.log(`[WA] Sessão ${clientId} já existe`);
+      return this.sessions.get(clientId);
+    }
 
-  async reconnect(sessionId: string = 'cliente_abc') {
-    const authFolder = `baileys_auth/${sessionId}`;
+    console.log(`[WA] Criando nova sessão para ${clientId}...`);
+    const authFolder = `baileys_auth/${clientId}`;
     const { state, saveCreds } = await useMultiFileAuthState(authFolder);
     const { version } = await fetchLatestBaileysVersion();
 
-    this.sock = makeWASocket({
+    const sock = makeWASocket({
       version,
       logger: P({ level: 'info' }),
       auth: state,
     });
 
-    this.sock.ev.on('creds.update', () =>
+    sock.ev.on('creds.update', () =>
       this.sessionHandler.handleCredsUpdate(saveCreds),
     );
-    this.sock.ev.on('connection.update', (update) =>
-      this.connectionHandler.handleConnectionUpdate(update),
+
+    sock.ev.on('connection.update', (update) =>
+      this.connectionHandler.handleConnectionUpdate(update, clientId),
     );
-    // this.sock.ev.on(
-    //   'messaging-history.set',
-    //   this.messageHandler.handleMessagingHistorySet,
+
+    // sock.ev.on('messages.upsert', (event) =>
+    //   this.messageHandler.handleMessagesUpsert(event.messages),
     // );
-    this.sock.ev.on('messages.upsert', (event) =>
-      this.messageHandler.handleMessagesUpsert(event.messages),
-    );
-    this.sock.ev.on('messages.upsert', (event) =>
-      this.messageHandler.gptResponder({
-        messages: event.messages,
-        sock: this.sock,
-        type: event.type,
-      }),
-    );
+
+    // sock.ev.on('messages.upsert', (event) =>
+    //   this.messageHandler.gptResponder({
+    //     messages: event.messages,
+    //     sock: sock,
+    //     type: event.type,
+    //   }),
+    // );
+
+    this.sessions.set(clientId, sock);
+    return sock;
+  }
+  async forceRestartSession(clientId: string): Promise<WASocket | undefined> {
+    console.log(`[WA] Forçando restart da sessão ${clientId}`);
+    await this.closeSession(clientId);
+    return await this.startSession(clientId);
   }
 
-  getSocket(): WASocket {
-    return this.sock;
+  getSession(clientId: string): WASocket | undefined {
+    return this.sessions.get(clientId);
   }
 
-  async sendMessage(number: string, message: string) {
-    const jid = number.includes('@s.whatsapp.net')
-      ? number
-      : `${number}@s.whatsapp.net`;
-    await this.sock.sendMessage(jid, { text: message });
-    console.log(`[WA] Mensagem enviada para ${number}: ${message}`);
+  async closeSession(clientId: string) {
+    const session = this.sessions.get(clientId);
+    if (session) {
+      const isOpen = session.ws.isConnecting || session.ws.isOpen;
+
+      if (isOpen) {
+        try {
+          await session.logout();
+          console.log(`[WA] Logout feito para ${clientId}`);
+        } catch (error) {
+          console.warn(
+            `[WA] Erro ao fazer logout da sessão ${clientId} (provavelmente a conexão já estava fechada):`,
+            error.message,
+          );
+        }
+      } else {
+        console.log(
+          `[WA] Sessão ${clientId} já estava desconectada, pulando logout.`,
+        );
+      }
+
+      this.sessions.delete(clientId);
+    } else {
+      console.log(`[WA] Sessão ${clientId} não encontrada para closeSession.`);
+    }
   }
 
-  async logoutAndResetSession(sessionId: string) {
-    const folder = `baileys_auth_info/${sessionId}`;
+  async logoutAndDelete(clientId: string) {
+    const session = this.sessions.get(clientId);
     const fs = await import('fs/promises');
-    await fs.rm(folder, { recursive: true, force: true });
-    console.log(`🧹 Sessão ${sessionId} removida`);
+    const authFolder = Path.join('baileys_auth', clientId);
 
-    await this.reconnect(sessionId); // reconecta com QR para esse usuário
+    if (session) {
+      const isOpen = session.ws.isConnecting || session.ws.isOpen;
+      if (isOpen) {
+        try {
+          await session.logout();
+        } catch (error) {
+          console.warn(
+            `[WA] Erro ao fazer logout da sessão ${clientId}:`,
+            error.message,
+          );
+        }
+      }
+      this.sessions.delete(clientId);
+    }
+
+    try {
+      await fs.rm(authFolder, { recursive: true, force: true });
+      console.log(`[WA] Dados da sessão ${clientId} removidos.`);
+    } catch (error) {
+      console.error(`[WA] Erro ao deletar pasta ${authFolder}:`, error);
+    }
   }
 }
