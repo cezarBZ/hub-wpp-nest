@@ -1,4 +1,4 @@
-import { IsString, IsNumber, Matches } from 'class-validator';
+import { IsString, Matches } from 'class-validator';
 
 export class SendOrderMessageDto {
   @IsString()
@@ -8,11 +8,5 @@ export class SendOrderMessageDto {
   phone: string;
 
   @IsString()
-  customerName: string;
-
-  @IsString()
-  orderId: string;
-
-  @IsNumber()
-  total: number;
+  message: string;
 }

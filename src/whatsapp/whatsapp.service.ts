@@ -1,4 +1,8 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  OnModuleInit,
+} from '@nestjs/common';
 import makeWASocket, {
   WASocket,
   useMultiFileAuthState,
@@ -11,11 +15,30 @@ import { SessionHandlerService } from './handlers/session.handler';
 import { SendOrderMessageDto } from './dto/send-order-message.dto';
 import { SendStoreCreatedMessageDto } from './dto/send-store-created-message.dto';
 import * as Path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
-export class WhatsappService {
+export class WhatsappService implements OnModuleInit {
   private sessions = new Map<string, WASocket>();
 
+  async onModuleInit() {
+    const authRoot = Path.join(process.cwd(), 'baileys_auth');
+    if (!fs.existsSync(authRoot)) return;
+
+    const clientIds = fs
+      .readdirSync(authRoot, { withFileTypes: true })
+      .filter((dirent) => dirent.isDirectory())
+      .map((dirent) => dirent.name);
+
+    for (const clientId of clientIds) {
+      try {
+        await this.startSession(clientId);
+        console.log(`[WA] Sessão restaurada para ${clientId}`);
+      } catch (err) {
+        console.error(`[WA] Falha ao restaurar sessão ${clientId}:`, err);
+      }
+    }
+  }
   constructor(
     private readonly messageHandler: MessageHandlerService,
     private readonly connectionHandler: ConnectionHandlerService,
@@ -24,8 +47,9 @@ export class WhatsappService {
 
   async startSession(clientId: string): Promise<WASocket | undefined> {
     if (this.sessions.has(clientId)) {
+      const existingSession = this.sessions.get(clientId);
       console.log(`[WA] Sessão ${clientId} já existe`);
-      return this.sessions.get(clientId);
+      return existingSession;
     }
 
     console.log(`[WA] Criando nova sessão para ${clientId}...`);
@@ -38,6 +62,9 @@ export class WhatsappService {
       logger: P({ level: 'info' }),
       auth: state,
     });
+
+    // Armazenar a sessão imediatamente
+    this.sessions.set(clientId, sock);
 
     sock.ev.on('creds.update', () =>
       this.sessionHandler.handleCredsUpdate(saveCreds),
@@ -59,7 +86,6 @@ export class WhatsappService {
     //   }),
     // );
 
-    this.sessions.set(clientId, sock);
     return sock;
   }
   async forceRestartSession(clientId: string): Promise<WASocket | undefined> {
@@ -129,12 +155,11 @@ export class WhatsappService {
 
   async sendOrderConfirmation(data: SendOrderMessageDto, clientId: string) {
     const jid = `${data.phone}@s.whatsapp.net`;
-    const message = `Olá ${data.customerName}, seu pedido ${data.orderId} foi confirmado! Total: R$ ${data.total.toFixed(2)}.`;
     const session = this.sessions.get(clientId);
     if (!session) return false;
 
     try {
-      await session.sendMessage(jid, { text: message });
+      await session.sendMessage(jid, { text: data.message });
       return { success: true };
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);

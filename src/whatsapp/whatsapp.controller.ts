@@ -30,9 +30,16 @@ export class WhatsappController {
 
   @Get('qr/:clientId')
   async getQR(@Param('clientId') clientId: string) {
-    const session = this.whatsappService.getSession(clientId);
+    let session = this.whatsappService.getSession(clientId);
 
-    if (session && session.ws.isOpen && session.user) {
+    // Se não existe sessão, criar uma nova
+    if (!session) {
+      console.log(`[Controller] Criando nova sessão para ${clientId}`);
+      session = await this.whatsappService.startSession(clientId);
+    }
+
+    // Verificar se já está conectado
+    if (session && session.ws?.isOpen && session.user) {
       const user = session.user;
       return {
         status: 'already_connected',
@@ -44,21 +51,22 @@ export class WhatsappController {
       };
     }
 
-    await this.whatsappService.startSession(clientId);
+    // Aguardar um pouco para o QR ser gerado
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const qr = this.qrStorageService.getQR(clientId);
 
     if (!qr) {
       return {
         status: 'waiting',
-        message: 'QR ainda não disponível.',
+        message: 'QR ainda não disponível. Tente novamente em alguns segundos.',
       };
     }
 
     const qrBase64 = await QRCode.toDataURL(qr);
 
     return {
-      status: 'ok',
+      status: 'qr_ready',
       qr_base64: qrBase64,
     };
   }
